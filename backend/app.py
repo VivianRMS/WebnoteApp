@@ -6,7 +6,7 @@ from pymongo import MongoClient
 app = Flask(__name__)
 CORS(app)
 
-uri = "mongodb+srv://kunlin:password1234567@webnote-app.aiu2k.mongodb.net/?retryWrites=true&w=majority"
+uri = "mongodb+srv://kunlin:<password>@webnote-app.aiu2k.mongodb.net/?retryWrites=true&w=majority"
 client = MongoClient(uri)
 db = client["webnote-app"]
 
@@ -48,12 +48,23 @@ function generateXPath(element) {
 
 function getSelectedText() {
   const selection = window.getSelection();
+  if (!selection.rangeCount) return;
   const range = selection.getRangeAt(0);
   const selectedText = selection.toString();
   const xpath = generateXPath(range.commonAncestorContainer);
   alert("Selected Text: " + selectedText + "\nXPath: " + xpath);
-  const startOffset = range.startOffset;
-  const endOffset = range.endOffset;
+  if (!selectedText.trim()) return; 
+  const startContainer = range.startContainer;
+  const endContainer = range.endContainer;
+
+  let absoluteStartOffset = range.startOffset;
+  let node = startContainer;
+  while (node.previousSibling) {
+    node = node.previousSibling;
+    absoluteStartOffset += (node.textContent || '').length;
+  }
+
+  let absoluteEndOffset = absoluteStartOffset + selectedText.length;
 
   const style = document.createElement('style');
   style.innerHTML = `
@@ -69,13 +80,14 @@ function getSelectedText() {
   range.surroundContents(span);
 
   const startContainerXPath = generateXPath(range.startContainer);
-
+  console.log("Start Container XPath: " + startContainerXPath);
+  
   const data = {
     "selected_text": selectedText,
     "highlighted_html": span.outerHTML,
     "opened_url": window.location.href,
-    "range_start_offset": startOffset,
-    "range_end_offset": endOffset,
+    "range_start_offset": absoluteStartOffset,
+    "range_end_offset": absoluteEndOffset,
     "startContainer_xpath": startContainerXPath,
   };
 
@@ -129,6 +141,7 @@ function getNotes() {
     .then(response => response.json())
     .then(notes => {
         console.log('Notes retrieved:', notes);
+        notes.sort((a, b) => a.range_start_offset - b.range_start_offset);
         for (const note of notes) {
             const selected_text = note["selected_text"];
             const start_offset = note["range_start_offset"];
@@ -143,20 +156,42 @@ function getNotes() {
               null
             ).singleNodeValue;
 
-            let textNode = null;
-            for (let node = startContainer.firstChild; node; node = node.nextSibling) {
-                if (node.nodeType === Node.TEXT_NODE && node.nodeValue.trim() !== "") {
-                    textNode = node;
-                    break;
+            if (!startContainer) continue;
+
+            let found = false;
+            let cumulativeLength = 0;
+            let startNode, endNode, startOffset, endOffset;
+            for (const node of startContainer.childNodes) {
+                if (node.nodeType === Node.TEXT_NODE || (node.nodeType === Node.ELEMENT_NODE && node.className === 'highlighted-text')) {
+                    const nodeLength = node.textContent.length;
+
+                    if (!found && cumulativeLength + nodeLength >= note.range_start_offset) {
+                        startNode = node;
+                        startOffset = note.range_start_offset - cumulativeLength;
+                        found = true;
+                    }
+
+                    if (found && cumulativeLength + nodeLength >= note.range_end_offset) {
+                        endNode = node;
+                        endOffset = note.range_end_offset - cumulativeLength;
+                        break;
+                    }
+
+                    cumulativeLength += nodeLength;
                 }
             }
 
+            if (!startNode || !endNode) continue;
+
             console.log('Start container:', startContainer);
-            console.log('Text node:', textNode);
+            console.log('Start node:', startNode);
+            console.log('End node:', endNode);
+            console.log('Start offset:', startOffset);
+            console.log('End offset:', endOffset);
 
             const range = document.createRange();
-            range.setStart(textNode, start_offset);
-            range.setEnd(textNode, end_offset);
+            range.setStart(startNode, startOffset);
+            range.setEnd(endNode, endOffset);
 
             const style = document.createElement('style');
             style.innerHTML = `
