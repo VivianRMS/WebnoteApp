@@ -343,9 +343,25 @@ function Folders({
 
   if (allFolders.length === 0) {
     return (
-      <p className="message">
-        No folders for this category yet! Create the first one 🤩
-      </p>
+      <section className="no-folders-section">
+        <p className="message">
+          No folders for this category yet! Create the first one 🤩
+        </p>
+        <button
+          className="btn btn-back btn-add"
+          onClick={() => setShowAddFolder(!showAddFolder)}
+        >
+          {showAddFolder ? "Close" : "Add"}
+        </button>
+        {showAddFolder ? (
+          <NewFolderForm
+            setAllFolders={setAllFolders}
+            setShowAddFolder={setShowAddFolder}
+            allFolders={allFolders}
+            currentPath={currentPath}
+          />
+        ) : null}
+      </section>
     );
   }
 
@@ -501,9 +517,25 @@ function Links({
 
   if (allLinks.length === 0) {
     return (
-      <p className="message">
-        No Links for this category yet! Create the first one 🤩
-      </p>
+      <section className="no-links-section">
+        <p className="message">
+          No Links for this category yet! Create the first one 🤩
+        </p>
+        <button
+          className="btn btn-back btn-add"
+          onClick={() => setShowAddLink(!showAddLink)}
+        >
+          {showAddLink ? "Close" : "Add"}
+        </button>
+        {showAddLink ? (
+          <NewLinkForm
+            setAllLinks={setAllLinks}
+            setShowAddLink={setShowAddLink}
+            allLinks={allLinks}
+            currentPath={currentPath}
+          />
+        ) : null}
+      </section>
     );
   }
 
