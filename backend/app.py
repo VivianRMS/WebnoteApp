@@ -10,11 +10,16 @@ uri = "mongodb+srv://kunlin:<password>@webnote-app.aiu2k.mongodb.net/?retryWrite
 client = MongoClient(uri)
 db = client["webnote-app"]
 
-collectionName = "notes"
+collectionNameNotes = "notes"
+collectionNamePages = "webpages"
 
-if collectionName not in db.list_collection_names():
-    db.create_collection(collectionName)
-collection = db[collectionName]
+if collectionNameNotes not in db.list_collection_names():
+    db.create_collection(collectionNameNotes)
+collectionNotes = db[collectionNameNotes]
+
+if collectionNamePages not in db.list_collection_names():
+    db.create_collection(collectionNamePages)
+collectionPages = db[collectionNamePages]
 
 @app.route('/generate_bookmarklet', methods=['GET', 'POST'])
 def generate_bookmarklet():
@@ -123,14 +128,14 @@ getSelectedText();
 def insert_data(opened_url):
     data = request.json
     # Check if the document exists for the given opened_url
-    existing_data = collection.find_one({"opened_url": opened_url})
+    existing_data = collectionNotes.find_one({"opened_url": opened_url})
     
     if existing_data:
         # If the document already exists, append the new data to the 'texts' list
-        collection.update_one({"opened_url": opened_url}, {"$push": {"texts": data}})
+        collectionNotes.update_one({"opened_url": opened_url}, {"$push": {"texts": data}})
     else:
         # If the document doesn't exist, create a new one with the 'texts' list
-        collection.insert_one({"opened_url": opened_url, "texts": [data]})
+        collectionNotes.insert_one({"opened_url": opened_url, "texts": [data]})
     return jsonify(message="Data inserted into MongoDB")
 
 @app.route('/generate_notes_bookmarklet', methods=['GET'])
@@ -222,7 +227,7 @@ getNotes();
 def get_notes(opened_url):
     try:
         # Filter notes based on the opened URL
-        notes = collection.find_one({"opened_url": opened_url})
+        notes = collectionNotes.find_one({"opened_url": opened_url})
         texts = notes.get("texts", [])
         notes_list = []
         for note in texts:
@@ -239,5 +244,82 @@ def get_notes(opened_url):
     except Exception as e:
         return jsonify(error=f"An error occurred: {e}")
     
+@app.route('/get_info/<path:folder_path>/folders', methods=['GET'])
+def get_folders(folder_path):
+    try:
+        category_name = folder_path.split('/')[0]
+        result = collectionPages.find_one({"category_name": category_name}, {"folders": 1, "_id": 0})
+        folders_list = []
+        if result and "folders" in result :
+            folders = result["folders"]
+            folders_list = [folder["name"] for folder in folders if folder.get("folder_path") == folder_path]
+        return jsonify(folders_list = folders_list)
+    except Exception as e:
+        return jsonify(error=f"An error occurred: {e}")
+    
+@app.route('/get_info/<path:folder_path>/links', methods=['GET'])
+def get_links(folder_path):
+    try:
+        category_name = folder_path.split('/')[0]
+        parts = folder_path.rsplit('/', 1)
+        link_path = parts[0] if len(parts) > 1 else folder_path
+        links_list = []
+        folder_name = folder_path.split('/')[-1]
+        if(link_path == folder_path):
+            result = collectionPages.find_one({"category_name": category_name}, {"links": 1, "_id": 0})
+            if result and "links" in result :
+                links_list = result["links"]
+        else:
+            result = collectionPages.find_one({"category_name": category_name}, {"folders": 1, "_id": 0})
+            if result and "folders" in result :
+                folders = result["folders"]
+                links_list_list = [folder["links"] for folder in folders if (folder.get("folder_path") == link_path) and (folder.get("name") == folder_name) and ("links" in folder)]
+                links_list = links_list_list[0] if len(links_list_list) > 0 else []
+        return jsonify(links_list=links_list)
+    except Exception as e:
+        return jsonify(error=f"An error occurred: {e}")
+    
+@app.route('/get_info/get_categories', methods=['GET'])
+def get_categories():
+    try:
+        categories = collectionPages.find()
+        categories_list = []
+        for category in categories :
+            categories_list.append({"category_name": category.get("category_name"), "color": category.get("color")})
+        return jsonify(categories_list=categories_list)
+    except Exception as e:
+        return jsonify(error=f"An error occurred: {e}")
+    
+@app.route('/add_category', methods=['GET','POST'])
+def add_category():
+    data = request.json
+    collectionPages.insert_one(data)
+    return jsonify(message="Category inserted into MongoDB")
+  
+@app.route('/add_folder/<path:category_name>', methods=['GET','POST'])
+def add_folder(category_name):
+    try:
+        data = request.json
+        collectionPages.update_one(
+        {"category_name": category_name},
+        {"$push": {"folders": data}}
+    )
+        return jsonify(message="Folder inserted into MongoDB")
+    except Exception as e:
+        return jsonify(error=f"An error occurred: {e}")
+    
+@app.route('/add_link/<path:folder_path>', methods=['GET','POST'])
+def add_link(folder_path):
+    try:
+        data = request.json
+        category_name = folder_path.split('/')[0]
+        if folder_path == category_name:
+            collectionPages.update_one({"category_name": category_name},{"$push": {"links": data}})
+        else:
+            collectionPages.update_one({"category_name": category_name}, {"folders.folder_path": folder_path},{"$push": {"folders.$.links": data}})
+        return jsonify(message="Link inserted into MongoDB")
+    except Exception as e:
+        return jsonify(error=f"An error occurred: {e}")
+
 if __name__ == "__main__":
     app.run(debug=True, host='0.0.0.0', port=5000)
