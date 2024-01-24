@@ -6,7 +6,7 @@ from pymongo import MongoClient
 app = Flask(__name__)
 CORS(app)
 
-uri = "mongodb+srv://kunlin:<password>@webnote-app.aiu2k.mongodb.net/?retryWrites=true&w=majority"
+uri = "mongodb+srv://kunlin:password1234567@webnote-app.aiu2k.mongodb.net/?retryWrites=true&w=majority"
 client = MongoClient(uri)
 db = client["webnote-app"]
 
